@@ -5,7 +5,7 @@ from s0_filename import data_filename
 
 def date_files(log_date, last_hours):
     return [
-        data_filename(log_date - timedelta(hours=last_hour)) for last_hour in range(last_hours, 0, -1)
+        data_filename(log_date - timedelta(hours=last_hour)) for last_hour in range(last_hours)
     ]
 
 
