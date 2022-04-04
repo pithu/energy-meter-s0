@@ -4,6 +4,8 @@ from datetime import datetime
 import time
 import os
 
+from s0_filename import data_filename
+
 GPIO_PIR = 18
 
 GPIO.setmode(GPIO.BOARD)
@@ -11,20 +13,16 @@ GPIO.setup(GPIO_PIR, GPIO.IN)
 
 count = 0
 current_date = datetime.now()
-date_dir = os.path.dirname(os.path.abspath(__file__)) + "/data"
 
-print("programm start up", GPIO.RPI_INFO, GPIO.gpio_function(GPIO_PIR))
+print("so_logger start up", GPIO.RPI_INFO, GPIO.gpio_function(GPIO_PIR))
+
 
 def log_minute(now, count):
-    path = date_dir + "/" + now.strftime("%Y/%m/%d")
-    hour = now.strftime("%H")
-    minute = now.strftime("%M")
-    filename = path + "/" + hour + ".csv"
-    # print(filename, minute, count)
+    data_file = data_filename(now)
+    os.makedirs(os.path.dirname(data_file['full_filename']), mode=0o777, exist_ok=True)
+    with open(data_file['full_filename'], 'a+') as f:
+        f.write(data_file['minute'] + ":" + str(count) + ",")
 
-    os.makedirs(path, mode=0o777, exist_ok=True)
-    with open(filename, 'a+') as f:
-        f.write(minute + ":" + str(count) + ",")
 
 def has_raised(channel):
     global count, current_date
@@ -35,6 +33,7 @@ def has_raised(channel):
         current_date = now
     count += 1
     # print(now.hour, now.minute, count)
+
 
 try:
     GPIO.add_event_detect(GPIO_PIR , GPIO.RISING, callback=has_raised, bouncetime=20)
