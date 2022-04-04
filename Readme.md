@@ -1,13 +1,18 @@
 ## Autostart s0 logger
 
-```shell
-$ sudo crontab -e 
+Adapt path and other settings in `./services-conf/s0_logger.service` and than
 
-@reboot /usr/bin/sudo /home/pithu/projects/energy-meter-s0/s0_logger.py >> /var/log/energy-meter-s0.log
+```shell
+sudo cp ./services-conf/s0_logger.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start s0_logger.service
+sudo systemctl enable s0_logger.service
 ```
 
 ## Start s0 server 
 
 ```shell
+pip3 install - r requirements.txt
+
 $ uvicorn s0_server:app --reload
 ```
