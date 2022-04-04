@@ -9,7 +9,7 @@ app = FastAPI()
 
 @app.get("/")
 def get_root():
-    return {"s0-server": "up and running"}
+    return {"s0-server": "up and running. call /s0-logs/{last_hours} for getting the s0 logs"}
 
 
 @app.get("/s0-logs/{last_hours}")
