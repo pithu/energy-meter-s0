@@ -3,7 +3,7 @@
 ```shell
 pip3 install -r requirements.txt
 
-python3 s0_logger.py
+sudo python3 s0_logger.py
 python3 s0_server.py
 ```
 
