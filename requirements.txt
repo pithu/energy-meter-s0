@@ -1,1 +1,2 @@
 bottle
+bottle_cors_plugin
