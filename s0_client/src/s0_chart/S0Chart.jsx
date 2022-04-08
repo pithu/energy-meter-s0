@@ -1,7 +1,7 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
 import {
-    AreaChart, Area, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
+     Area, CartesianGrid, ComposedChart, Label, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import {DateTimeFormatter, Instant, LocalDateTime, ZoneId, ZoneOffset} from "@js-joda/core";
 import { dropLastWhile, isEmpty, splitEvery, sum } from 'ramda';
@@ -51,22 +51,25 @@ const enhanceFlatS0Data = (flatS0Data, minutes_aggregate) => {
             return flatS0Data[dateString]
                 .map((power, idx) => ({
                     es: epochSecondsAtHour + idx * 60,
-                    val: parseInt(power || "0") * powerFactor,
+                    val: parseInt(power || "0"),
                 }));
         })
         .flat();
-    if (minutes_aggregate > 1) {
-        return splitEvery(minutes_aggregate, enhancedData)
-            .map(
-                (aggregate) => ({
-                    es: aggregate[0].es,
-                    val: sum(aggregate.map((i) => i.val)),
-                }));
-    }
-    return enhancedData;
+
+    let total = 0;
+    return splitEvery(minutes_aggregate, enhancedData)
+        .map(
+            (aggregate) => {
+                const val = sum(aggregate.map((i) => i.val));
+                total += val;
+                return {
+                    es: aggregate[0].es, val: val * powerFactor, wh: total,
+                }
+            }
+        );
 }
 
-const S0Chart = ({ s0_server_url, width, height, hours, minutes_aggregate}) => {
+const S0Chart = ({ s0_server_url, hours, minutes_aggregate}) => {
     const [flatData, setFlatData] = useState({});
     const [data, setData] = useState([]);
 
@@ -99,15 +102,13 @@ const S0Chart = ({ s0_server_url, width, height, hours, minutes_aggregate}) => {
     }, [flatData, minutes_aggregate]);
 
     const tooltipFormatter = useCallback(
-        (power) => ([`${power} Watt` ])
+        (value, key) => key === 'val' ? [`${value} W`] : [`${value} WH`]
     , [])
 
     return (
         <div style={{ width: '100%', height: '100vh' }}>
             <ResponsiveContainer>
-                <AreaChart
-                        width={width}
-                        height={height}
+                <ComposedChart
                         data={data}
                         margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                     <XAxis
@@ -121,12 +122,36 @@ const S0Chart = ({ s0_server_url, width, height, hours, minutes_aggregate}) => {
                         dataKey="val"
                         type="number"
                         domain={[0, 'dataMax']}
-                        label="Watt"
-                    />
+                        yAxisId="left"
+                    >
+                        <Label
+                            value='W'
+                            position='outside'
+                            angle={-90}
+                        />
+                    </YAxis>
+                    <YAxis
+                        dataKey="wh"
+                        type="number"
+                        domain={[0, 'dataMax']}
+                        yAxisId="right"
+                        orientation="right"
+                    >
+                        <Label
+                            value='WH'
+                            position='outside'
+                            angle={-90}
+                        />
+                    </YAxis>
                     <CartesianGrid strokeDasharray="3 3" />
                     <Tooltip labelFormatter={formatDateTime} formatter={tooltipFormatter} />
-                    <Area dataKey="val" type="monotone"  stroke="#C41E3A" fill="#D22B2B" />
-                </AreaChart>
+                    <Area
+                        yAxisId="left" dataKey="val" type="monotone"  stroke="#C41E3A" fill="#D22B2B"
+                    />
+                    <Line
+                        yAxisId="right" dataKey="wh" type="monotone" dot={false}  stroke="darkred" strokeWidth={2}
+                    />
+                </ComposedChart>
             </ResponsiveContainer>
         </div>
     )
@@ -142,8 +167,6 @@ S0Chart.propTypes = {
 
 S0Chart.defaultProps = {
     s0_server_url: 'http://localhost:8080',
-    width: 800,
-    height: 600,
     hours: 24,
     minutes_aggregate: 1
 };
