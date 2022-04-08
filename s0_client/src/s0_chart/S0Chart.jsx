@@ -1,63 +1,72 @@
-import React, {useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import {DateTimeFormatter, Instant, LocalDate, ZoneId, ZoneOffset} from "@js-joda/core";
+import {DateTimeFormatter, Instant, LocalDateTime, ZoneId, ZoneOffset} from "@js-joda/core";
 import { dropLastWhile, splitEvery, sum } from 'ramda';
 
 const dateTimeFormat = DateTimeFormatter.ofPattern('dd.MM.yyyy HH:mm')
-const s0DateFormat = DateTimeFormatter.ofPattern('yyyy/MM/dd')
+const flatS0DateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd'T'HH")
 
 const formatDateTime = (es) =>
     Instant.ofEpochSecond(es).atZone(ZoneId.systemDefault()).toLocalDateTime().format(dateTimeFormat)
 
-const mapS0LogData = (s0LogData, minutes_aggregate) => {
-    let data = [];
-    // map to epoch second items FIXME time zone
+const flattenS0LogData = (s0LogData) => {
+    const flatS0Log = {};
     for (const dateString of Object.keys(s0LogData).sort()) {
-        const localDateTime = LocalDate.parse(dateString, s0DateFormat).atStartOfDay();
         for (const hourString of Object.keys(s0LogData[dateString]).sort()) {
-            const hour = parseInt(hourString);
-            const localDateTimeAtHour = localDateTime.plusHours(hour);
-            const minuteValues = s0LogData[dateString][hourString]
-                .map((power, idx) => ({
-                    es: localDateTimeAtHour
-                        .plusMinutes(idx)
-                        .toEpochSecond(ZoneOffset.UTC),
-                    val: power != null ? parseInt(power) : null,
-                }))
-            data.push(...minuteValues);
+            flatS0Log[`${dateString}T${hourString}`] =
+                dropLastWhile((val) => val == null, s0LogData[dateString][hourString]);
         }
     }
-    // filter trailing empty values
-    data = dropLastWhile((item) => item.val == null, data);
-    // aggregate minutes
+    return flatS0Log;
+}
+
+const enhanceFlatS0Data = (flatS0Data, minutes_aggregate) => {
+    const enhancedData = Object
+        .keys(flatS0Data)
+        .sort()
+        .map((dateString) => {
+            const epochSecondsAtHour = LocalDateTime
+                .parse(dateString, flatS0DateFormat)
+                .toEpochSecond(ZoneOffset.UTC);
+            return flatS0Data[dateString]
+                .map((power, idx) => ({
+                    es: epochSecondsAtHour + idx * 60,
+                    val: parseInt(power || "0"),
+                }));
+        })
+        .flat();
     if (minutes_aggregate > 1) {
-        data = splitEvery(minutes_aggregate, data)
+        return splitEvery(minutes_aggregate, enhancedData)
             .map(
                 (aggregate) => ({
                     es: aggregate[0].es,
                     val: sum(aggregate.map((i) => i.val)),
                 }));
     }
-    return data;
+    return enhancedData;
 }
 
 const S0Chart = ({ s0_server_url, width, height, hours, minutes_aggregate}) => {
+    const [flatData, setFlatData] = useState({});
     const [data, setData] = useState([]);
 
     useEffect(() => {
         const fetchData = async () => {
             const response = await fetch(`${s0_server_url}/s0-logs/${hours}`);
             const s0LogData = await response.json();
-            const data = mapS0LogData(s0LogData, minutes_aggregate);
-            setData(data);
+            setFlatData(flattenS0LogData(s0LogData));
         }
         fetchData().catch(console.error);
-    }, [s0_server_url, hours, minutes_aggregate])
+    }, [s0_server_url, hours])
 
-    const tooltipFormatter = (power) => {
-        return [`${power} Watt/h per ${minutes_aggregate} min` ];
-    }
+    useMemo(() => {
+        setData(enhanceFlatS0Data(flatData));
+    }, [flatData]);
+
+    const tooltipFormatter = useCallback(
+        (power) => ([`${power} Watt/h per ${minutes_aggregate} min` ])
+    , [minutes_aggregate])
 
     return (
         <AreaChart
