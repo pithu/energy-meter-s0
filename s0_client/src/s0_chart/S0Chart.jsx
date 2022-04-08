@@ -1,6 +1,8 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import {
+    AreaChart, Area, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
 import {DateTimeFormatter, Instant, LocalDateTime, ZoneId, ZoneOffset} from "@js-joda/core";
 import { dropLastWhile, splitEvery, sum } from 'ramda';
 
@@ -21,7 +23,14 @@ const flattenS0LogData = (s0LogData) => {
     return flatS0Log;
 }
 
+const verifyMinutesAggregate = (minutes_aggregate) => {
+    if (!Number.isInteger(60 /minutes_aggregate)) {
+        console.error(`Configuration error: prop minutes_aggregate '${minutes_aggregate}' must be a divisor of 60`)
+    }
+}
+
 const enhanceFlatS0Data = (flatS0Data, minutes_aggregate) => {
+    const powerFactor = 60 / minutes_aggregate;
     const enhancedData = Object
         .keys(flatS0Data)
         .sort()
@@ -32,7 +41,7 @@ const enhanceFlatS0Data = (flatS0Data, minutes_aggregate) => {
             return flatS0Data[dateString]
                 .map((power, idx) => ({
                     es: epochSecondsAtHour + idx * 60,
-                    val: parseInt(power || "0"),
+                    val: parseInt(power || "0") * powerFactor,
                 }));
         })
         .flat();
@@ -51,45 +60,52 @@ const S0Chart = ({ s0_server_url, width, height, hours, minutes_aggregate}) => {
     const [flatData, setFlatData] = useState({});
     const [data, setData] = useState([]);
 
+    verifyMinutesAggregate(minutes_aggregate);
+
     useEffect(() => {
-        const fetchData = async () => {
+        const fetchS0LogData = async () => {
             const response = await fetch(`${s0_server_url}/s0-logs/${hours}`);
             const s0LogData = await response.json();
             setFlatData(flattenS0LogData(s0LogData));
         }
-        fetchData().catch(console.error);
+        fetchS0LogData().catch(console.error);
     }, [s0_server_url, hours])
 
     useMemo(() => {
-        setData(enhanceFlatS0Data(flatData));
-    }, [flatData]);
+        setData(enhanceFlatS0Data(flatData, minutes_aggregate));
+    }, [flatData, minutes_aggregate]);
 
     const tooltipFormatter = useCallback(
-        (power) => ([`${power} Watt/h per ${minutes_aggregate} min` ])
-    , [minutes_aggregate])
+        (power) => ([`${power} Watt` ])
+    , [])
 
     return (
-        <AreaChart
-                width={width}
-                height={height}
-                data={data}
-                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-            <XAxis
-                dataKey="es"
-                scale="time"
-                type="number"
-                domain={['dataMin', 'dataMax']}
-                tickFormatter={formatDateTime}
-            />
-            <YAxis
-                dataKey="val"
-                type="number"
-                domain={[0, 'dataMax']}
-            />
-            <CartesianGrid strokeDasharray="3 3" />
-            <Tooltip labelFormatter={formatDateTime} formatter={tooltipFormatter} />
-            <Area dataKey="val" type="monotone"  stroke="#C41E3A" fill="#D22B2B" />
-        </AreaChart>
+        <div style={{ width: '100%', height: '100vh' }}>
+            <ResponsiveContainer>
+                <AreaChart
+                        width={width}
+                        height={height}
+                        data={data}
+                        margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <XAxis
+                        dataKey="es"
+                        scale="time"
+                        type="number"
+                        domain={['dataMin', 'dataMax']}
+                        tickFormatter={formatDateTime}
+                    />
+                    <YAxis
+                        dataKey="val"
+                        type="number"
+                        domain={[0, 'dataMax']}
+                        label="Watt"
+                    />
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <Tooltip labelFormatter={formatDateTime} formatter={tooltipFormatter} />
+                    <Area dataKey="val" type="monotone"  stroke="#C41E3A" fill="#D22B2B" />
+                </AreaChart>
+            </ResponsiveContainer>
+        </div>
     )
 }
 
