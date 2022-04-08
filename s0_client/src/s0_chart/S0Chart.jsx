@@ -4,10 +4,12 @@ import {
     AreaChart, Area, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import {DateTimeFormatter, Instant, LocalDateTime, ZoneId, ZoneOffset} from "@js-joda/core";
-import { dropLastWhile, splitEvery, sum } from 'ramda';
+import { dropLastWhile, isEmpty, splitEvery, sum } from 'ramda';
 
 const dateTimeFormat = DateTimeFormatter.ofPattern('dd.MM.yyyy HH:mm')
 const flatS0DateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd'T'HH")
+
+const updateInterval = 60 * 1000;
 
 const formatDateTime = (es) =>
     Instant.ofEpochSecond(es).atZone(ZoneId.systemDefault()).toLocalDateTime().format(dateTimeFormat)
@@ -21,6 +23,14 @@ const flattenS0LogData = (s0LogData) => {
         }
     }
     return flatS0Log;
+}
+
+const updateFlatData = (flatData, s0LogData) => {
+    const flatS0LogData = flattenS0LogData(s0LogData);
+    return {
+        ...flatData,
+        ...flatS0LogData,
+    }
 }
 
 const verifyMinutesAggregate = (minutes_aggregate) => {
@@ -70,6 +80,19 @@ const S0Chart = ({ s0_server_url, width, height, hours, minutes_aggregate}) => {
         }
         fetchS0LogData().catch(console.error);
     }, [s0_server_url, hours])
+
+    useEffect(() => {
+        const intervalId = setInterval(() => {
+            const _updateFlatData = async () => {
+                if (isEmpty(flatData)) { return; }
+                const response = await fetch(`${s0_server_url}/s0-logs/2`);
+                const s0LogData = await response.json();
+                setFlatData(updateFlatData(flatData, s0LogData));
+            }
+            _updateFlatData().catch(console.error);
+        }, updateInterval);
+        return () => clearInterval(intervalId);
+    }, [flatData, s0_server_url]);
 
     useMemo(() => {
         setData(enhanceFlatS0Data(flatData, minutes_aggregate));
